@@ -21,25 +21,16 @@ source is muxed back in by default.
 
 ## Demo
 
-Input ([`assets/examples/robot_unitree.mp4`](assets/examples/robot_unitree.mp4))
-→ depth output ([`assets/examples/demo_robot_unitree.mp4`](assets/examples/demo_robot_unitree.mp4)),
-produced with the default settings (`DA3-LARGE-1.1`, `--sample-fps 1`,
+Side-by-side: input (left) ↔ depth output (right). Source
+[`assets/examples/robot_unitree.mp4`](assets/examples/robot_unitree.mp4),
+depth [`assets/examples/demo_robot_unitree.mp4`](assets/examples/demo_robot_unitree.mp4),
+composite [`assets/examples/demo_robot_compare.mp4`](assets/examples/demo_robot_compare.mp4).
+Produced with the default settings (`DA3-LARGE-1.1`, `--sample-fps 1`,
 `--colormap gray`, RIFE interpolation back to source fps).
 
-<table>
-  <tr>
-    <th>Input</th>
-    <th>Depth output</th>
-  </tr>
-  <tr>
-    <td>
-      <video src="https://github.com/user-attachments/assets/9a5d7443-fd84-4240-a983-510114e83b04" controls width="400" height="225"></video>
-    </td>
-    <td>
-      <video src="https://github.com/user-attachments/assets/cb80d2c0-2ba0-4f2f-a6a7-16c3f94bd52d" controls width="400" height="225"></video>
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <video src="https://github.com/user-attachments/assets/f322aacc-ac46-4088-acb8-dfaed6762441" controls width="800"></video>
+</p>
 
 Reproduce:
 
