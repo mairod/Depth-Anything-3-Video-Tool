@@ -64,6 +64,15 @@ def convert(
     no_interpolate: bool = typer.Option(False, "--no-interpolate", help="Skip frame interpolation."),
     keep_audio: bool = typer.Option(True, help="Mux audio from the source video into the output."),
     work_dir: Optional[Path] = typer.Option(None, help="Persist intermediates here for debugging."),
+    vram_check: bool = typer.Option(
+        True,
+        "--vram-check/--no-vram-check",
+        help="Probe VRAM with a tiny forward pass and abort if the configured chunk-size won't fit (CUDA only).",
+    ),
+    vram_safety: float = typer.Option(
+        1.25,
+        help="Safety multiplier on the estimated peak VRAM before comparing to free memory.",
+    ),
 ):
     """Run the full DA3 → RIFE → mux pipeline."""
     if input_video is None:
@@ -102,6 +111,8 @@ def convert(
         chunk_overlap=chunk_overlap,
         keep_audio=keep_audio,
         work_dir=work_dir,
+        vram_check=vram_check,
+        vram_safety=vram_safety,
     )
     run(cfg)
 
