@@ -52,6 +52,11 @@ dependencies = [
     # modern numpy.
     "gdown>=5",
     "sk-video>=1.1.10",
+    # Video-Depth-Anything deps (only the ones it actually imports at runtime
+    # and that aren't already pulled in by DA3). xformers and decord both have
+    # try/except fallbacks in VDA so we skip them — opencv-python (above) is
+    # the decord fallback, plain PyTorch attention is the xformers fallback.
+    "easydict",
 ]
 
 [project.scripts]
