@@ -134,8 +134,14 @@ v2d convert input.mp4 -o depth.mp4 --backend vda --vda-encoder vits   # faster
 
 | Backend | Strategy | Pros | Cons |
 |---------|---------|------|------|
-| **`da3`** (default) | DA3 at `--sample-fps` (low) → RIFE upsample to source fps | Cheap per-frame inference, big model selection (BASE/LARGE/GIANT/NESTED), works on MPS | RIFE can hallucinate at very high multipliers; needs `v2d setup` |
-| **`vda`** | VDA at source fps; temporal head built in | No RIFE; temporally smoother on motion; one-shot inference call | Heavier (full source fps), CUDA-oriented, only three encoder sizes (vits/vitb/vitl) |
+| **`da3`** (default) | DA3 at `--sample-fps` (low) → RIFE upsample to source fps | Highest per-frame quality; big model selection (BASE/LARGE/GIANT/NESTED); works on MPS | Large model weights (340M+); RIFE can hallucinate at very high multipliers; needs `v2d setup` |
+| **`vda`** | VDA at source fps; temporal head built in | Smallest available weights (VDA-S = 28M); no RIFE step; temporally smoother on motion | Runs at full source fps (more work per video); cap memory via `--vda-max-len` on long clips |
+
+### Which backend should I pick?
+
+- **8 GB VRAM or less, or no dedicated GPU** → `--backend vda --vda-encoder vits` (`--vda-fp32` on MPS). 28M weights + no RIFE is the lightest configuration `v2d` ships. Add `--vda-max-len 32` for long videos to cap peak activations.
+- **Mid-range GPU (12–24 GB)** → `--backend vda --vda-encoder vitb` for best quality/cost; or stay on `da3` with `DA3-LARGE-1.1` if you want DA3's per-frame sharpness.
+- **High-end GPU (24 GB+)** → either backend. `da3` with the GIANT/NESTED variants gives the sharpest single-frame depth; `vda --vda-encoder vitl` gives the smoothest temporal output.
 
 DA3-specific flags (`--sample-fps`, `--chunk-size`, `--chunk-overlap`,
 `--process-res`, `--model-dir`, `--no-interpolate`) are ignored when
