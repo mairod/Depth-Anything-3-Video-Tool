@@ -9,7 +9,7 @@ from typing import Optional
 import numpy as np
 
 from .depth_video import plan_chunks, stitch_chunks, write_depth_video
-from .ffmpeg_utils import extract_frames, mux_audio, probe_fps
+from .ffmpeg_utils import extract_frames, finalize_output, probe_duration, probe_fps
 from .interpolate import RifeRunner, choose_multiplier
 
 
@@ -37,6 +37,7 @@ class PipelineConfig:
 
 def run(cfg: PipelineConfig) -> Path:
     source_fps = probe_fps(cfg.input_video)
+    source_duration = probe_duration(cfg.input_video)
     target_fps = cfg.target_fps or source_fps
 
     tmp_root = cfg.work_dir or Path(tempfile.mkdtemp(prefix="v2d_"))
@@ -69,11 +70,18 @@ def run(cfg: PipelineConfig) -> Path:
         raise ValueError(f"unknown interpolator: {cfg.interpolator!r}")
 
     cfg.output_video.parent.mkdir(parents=True, exist_ok=True)
-    if cfg.keep_audio:
-        print("[v2d] muxing audio from source")
-        mux_audio(depth_interp, cfg.input_video, cfg.output_video)
-    else:
-        shutil.copyfile(depth_interp, cfg.output_video)
+    depth_dur = probe_duration(depth_interp)
+    print(
+        f"[v2d] retiming depth ({depth_dur:.3f}s) to match source ({source_duration:.3f}s); "
+        f"{'muxing audio' if cfg.keep_audio else 'no audio'}"
+    )
+    finalize_output(
+        depth_interp,
+        cfg.input_video,
+        cfg.output_video,
+        with_audio=cfg.keep_audio,
+        target_duration=source_duration,
+    )
 
     if cfg.work_dir is None:
         shutil.rmtree(tmp_root, ignore_errors=True)

@@ -80,6 +80,66 @@ def extract_frames(
     return frames
 
 
+def probe_duration(video: Path) -> float:
+    """Container duration in seconds via ffprobe."""
+    require("ffprobe")
+    out = subprocess.run(
+        [
+            "ffprobe", "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=nw=1:nk=1",
+            str(video),
+        ],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    try:
+        return float(out)
+    except ValueError as exc:
+        raise RuntimeError(f"could not parse duration for {video}: {out!r}") from exc
+
+
+def finalize_output(
+    depth_video: Path,
+    source_video: Path,
+    out: Path,
+    *,
+    with_audio: bool,
+    target_duration: float,
+) -> None:
+    """Retime depth_video to exactly target_duration (via setpts) and optionally
+    mux the source audio track. Re-encodes video to H.264/yuv420p.
+
+    Sampling at sample_fps quantizes the depth video's duration to the nearest
+    1/sample_fps; RIFE then rounds again. Without retiming, depth drifts a few
+    hundred ms from source, breaking sync. setpts scales every frame's PTS so
+    the depth playhead matches the source playhead at every instant.
+    """
+    require("ffmpeg")
+    in_dur = probe_duration(depth_video)
+    if in_dur <= 0:
+        raise RuntimeError(f"depth video {depth_video} has non-positive duration")
+    vf = f"setpts=PTS*{target_duration}/{in_dur}"
+
+    cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(depth_video)]
+    if with_audio:
+        cmd += ["-i", str(source_video)]
+    cmd += [
+        "-filter:v", vf,
+        # Preserve setpts-modified timestamps exactly; without this ffmpeg
+        # re-quantizes to a fixed output fps and we lose sub-frame precision
+        # (drifts ~1 frame ≈ 30 ms at 30 fps).
+        "-fps_mode", "passthrough", "-vsync", "passthrough",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p",
+        "-preset", "slow", "-crf", "18", "-movflags", "+faststart",
+    ]
+    if with_audio:
+        cmd += ["-map", "0:v:0", "-map", "1:a:0?", "-c:a", "aac", "-shortest"]
+    else:
+        cmd += ["-an"]
+    cmd.append(str(out))
+    subprocess.run(cmd, check=True)
+
+
 def mux_audio(silent_video: Path, audio_source: Path, out: Path) -> None:
     require("ffmpeg")
     subprocess.run(
