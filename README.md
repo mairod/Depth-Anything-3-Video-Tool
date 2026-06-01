@@ -1,23 +1,26 @@
 # v2d — Video to Depth-Map Video
 
-Convert any video into a depth-map video at the source frame rate.
-Standalone wrapper around [Depth Anything 3](https://github.com/ByteDance-Seed/Depth-Anything-3)
-(depth estimation) and [Practical-RIFE](https://github.com/hzwer/Practical-RIFE)
-(frame interpolation).
+Convert any video into a depth-map video at the source frame rate. Two
+selectable backends:
+
+- **DA3** (default) — [Depth Anything 3](https://github.com/ByteDance-Seed/Depth-Anything-3)
+  sampled at low fps + [Practical-RIFE](https://github.com/hzwer/Practical-RIFE)
+  interpolation back up.
+- **VDA** — [Video-Depth-Anything](https://github.com/DepthAnything/Video-Depth-Anything),
+  temporally consistent by construction. Runs at full fps; no RIFE.
 
 ```
-input.mp4 ──► DA3 (sample at low fps) ──► depth_video.mp4 (low fps)
-                                                │
-                                                ▼
-                                        RIFE interpolation
+                       ┌─ DA3:  sample low fps ──► RIFE interpolation
+input.mp4 ──► backend ─┤
+                       └─ VDA:  full fps ──────────────────────────────
                                                 │
                                                 ▼
                               depth_video.mp4 at source fps + audio
 ```
 
-Running DA3 at low `--sample-fps` (default 1) keeps inference cheap; RIFE
-interpolates the depth maps back up to the source fps. Audio from the
-source is muxed back in by default.
+DA3 path: low `--sample-fps` (default 1) keeps inference cheap, RIFE fills
+the gap. VDA path: VDA's temporal head does the smoothing, but you pay full
+source-fps inference. Audio is muxed back in by default for both.
 
 ## Demo
 
@@ -59,10 +62,16 @@ source .venv/bin/activate
 v2d setup
 # (weights are pulled from Google Drive via gdown; if that fails the command
 # prints a manual download link)
+
+# optional, only if you want the VDA backend: clone Video-Depth-Anything
+# and download its checkpoint (default: vitl) from HuggingFace
+v2d setup-vda
+# v2d setup-vda --encoder vits   # smaller / faster
+# v2d setup-vda --encoder vitb   # medium
 ```
 
-The cache lives at `~/.cache/v2d/Practical-RIFE` (override with
-`V2D_CACHE_DIR`).
+The cache lives at `~/.cache/v2d/` (override with `V2D_CACHE_DIR`) —
+RIFE under `Practical-RIFE/`, VDA under `Video-Depth-Anything/`.
 
 > **Why a Makefile and not just `pip install -e .`?** Upstream DA3 lists
 > `xformers` and `open3d` as required dependencies; neither ships pre-built
@@ -113,6 +122,24 @@ Use a smaller, permissively-licensed model:
 ```bash
 v2d convert input.mp4 -o depth.mp4 --model-dir depth-anything/DA3-BASE
 ```
+
+Switch to the Video-Depth-Anything backend (requires `v2d setup-vda`):
+
+```bash
+v2d convert input.mp4 -o depth.mp4 --backend vda --device cuda
+v2d convert input.mp4 -o depth.mp4 --backend vda --vda-encoder vits   # faster
+```
+
+## Backends
+
+| Backend | Strategy | Pros | Cons |
+|---------|---------|------|------|
+| **`da3`** (default) | DA3 at `--sample-fps` (low) → RIFE upsample to source fps | Cheap per-frame inference, big model selection (BASE/LARGE/GIANT/NESTED), works on MPS | RIFE can hallucinate at very high multipliers; needs `v2d setup` |
+| **`vda`** | VDA at source fps; temporal head built in | No RIFE; temporally smoother on motion; one-shot inference call | Heavier (full source fps), CUDA-oriented, only three encoder sizes (vits/vitb/vitl) |
+
+DA3-specific flags (`--sample-fps`, `--chunk-size`, `--chunk-overlap`,
+`--process-res`, `--model-dir`, `--no-interpolate`) are ignored when
+`--backend vda`. VDA-specific flags are listed below.
 
 ## Chunked inference (default)
 
@@ -172,6 +199,20 @@ v2d setup   # clones Practical-RIFE + downloads v4.26 weights
 | `--keep-audio / --no-keep-audio` | keep | Mux source audio into output |
 | `--work-dir` | tempdir | Keep intermediates here (extracted frames, low-fps depth) |
 | `--colormap` | `gray` | Matplotlib colormap for depth rendering (see below) |
+| `--backend` | `da3` | `da3` or `vda` |
+| `--vram-check / --no-vram-check` | on | Empirical VRAM probe before inference (CUDA only) |
+| `--vram-safety` | `1.25` | Multiplier on probe-estimated peak VRAM |
+
+### VDA-only flags (`--backend vda`)
+
+| Flag | Default | Notes |
+|------|---------|-------|
+| `--vda-dir` | cache | Override the VDA checkout location |
+| `--vda-encoder` | `vitl` | `vits` (28M) / `vitb` (113M) / `vitl` (382M) |
+| `--vda-input-size` | `518` | Model input resolution (longest edge) |
+| `--vda-fp32` | off | Run VDA in fp32 instead of fp16 |
+| `--vda-max-len` | `-1` | Cap frames per internal VDA chunk (`-1` = full video) |
+| `--vda-max-res` | `-1` | Cap frame-read resolution (longest edge) |
 
 ## Processing resolution
 
