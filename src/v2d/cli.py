@@ -64,6 +64,10 @@ def convert(
     no_interpolate: bool = typer.Option(False, "--no-interpolate", help="Skip frame interpolation."),
     keep_audio: bool = typer.Option(True, help="Mux audio from the source video into the output."),
     work_dir: Optional[Path] = typer.Option(None, help="Persist intermediates here for debugging."),
+    colormap: str = typer.Option(
+        "gray",
+        help="Matplotlib colormap for depth rendering. e.g. gray, gray_r, Spectral, viridis, magma, inferno, plasma, turbo, jet.",
+    ),
     vram_check: bool = typer.Option(
         True,
         "--vram-check/--no-vram-check",
@@ -111,6 +115,7 @@ def convert(
         chunk_overlap=chunk_overlap,
         keep_audio=keep_audio,
         work_dir=work_dir,
+        colormap=colormap,
         vram_check=vram_check,
         vram_safety=vram_safety,
     )

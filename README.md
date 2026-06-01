@@ -19,6 +19,34 @@ Running DA3 at low `--sample-fps` (default 1) keeps inference cheap; RIFE
 interpolates the depth maps back up to the source fps. Audio from the
 source is muxed back in by default.
 
+## Demo
+
+Input ([`assets/examples/robot_unitree.mp4`](assets/examples/robot_unitree.mp4))
+→ depth output ([`assets/examples/demo_robot_unitree.mp4`](assets/examples/demo_robot_unitree.mp4)),
+produced with the default settings (`DA3-LARGE-1.1`, `--sample-fps 1`,
+`--colormap gray`, RIFE interpolation back to source fps).
+
+<table>
+  <tr>
+    <th>Input</th>
+    <th>Depth output</th>
+  </tr>
+  <tr>
+    <td>
+      <video src="assets/examples/robot_unitree.mp4" controls width="400"></video>
+    </td>
+    <td>
+      <video src="assets/examples/demo_robot_unitree.mp4" controls width="400"></video>
+    </td>
+  </tr>
+</table>
+
+Reproduce:
+
+```bash
+v2d convert assets/examples/robot_unitree.mp4 -o demo_robot_unitree.mp4 --device mps
+```
+
 ## Requirements
 
 - Python 3.10 – 3.12
@@ -144,7 +172,7 @@ v2d setup   # clones Practical-RIFE + downloads v4.26 weights
 | `--target-fps` | source fps | Output fps after interpolation |
 | `--model-dir` | `depth-anything/DA3NESTED-GIANT-LARGE-1.1` | Any DA3 model id / local path |
 | `--device` | `cuda` | `cuda`, `mps`, or `cpu` |
-| `--process-res` | `504` | DA3 processing resolution |
+| `--process-res` | `504` | DA3 processing resolution. Also caps frame extraction (longest edge) and the depth output resolution. Must be a multiple of 14 (DA3 patch size). |
 | `--chunk-size` | `32` | Frames per DA3 forward pass (0 = single-shot) |
 | `--chunk-overlap` | `8` | Frames shared between consecutive chunks |
 | `--rife-dir` | cache | Override the Practical-RIFE checkout location |
@@ -152,6 +180,67 @@ v2d setup   # clones Practical-RIFE + downloads v4.26 weights
 | `--no-interpolate` | off | Skip interpolation, output at `--sample-fps` |
 | `--keep-audio / --no-keep-audio` | keep | Mux source audio into output |
 | `--work-dir` | tempdir | Keep intermediates here (extracted frames, low-fps depth) |
+| `--colormap` | `gray` | Matplotlib colormap for depth rendering (see below) |
+
+## Processing resolution
+
+`--process-res` controls three things at once:
+
+1. **Frame extraction**: ffmpeg downscales the longest edge of each extracted
+   frame to `process_res` (no-op if the input is already smaller). Avoids
+   writing full-resolution PNGs to disk only for DA3 to immediately resize
+   them.
+2. **DA3 inference**: longest edge clamped to `process_res`, then rounded to a
+   multiple of 14 (DA3's ViT patch size).
+3. **Output depth video**: written at the same processed resolution. The
+   depth video does **not** match the input resolution unless `process_res`
+   ≥ the input's longest edge.
+
+Useful values (all multiples of 14):
+
+| `--process-res` | Long edge | When |
+|----------------:|-----------|------|
+| `252` | 252 px | Toy / very fast smoke tests |
+| `392` | 392 px | Fast, some loss on thin structures |
+| **`504`** | 504 px | DA3 default — best quality/VRAM trade-off |
+| `700` | 700 px | Sharper edges, ~2× VRAM |
+| `1008` | 1008 px | Max practical, ~4× VRAM |
+
+DA3 attention is roughly quadratic in resolution, so doubling `process_res`
+quadruples VRAM use. Depth maps are smooth, so going above `504` rarely buys
+visible quality — bump it only for inputs with very thin/small structures.
+
+## Colormaps
+
+Pass any [matplotlib colormap](https://matplotlib.org/stable/users/explain/colors/colormaps.html)
+name to `--colormap`. DA3 inverts depth internally (1/z), so **bright = near, dark = far**
+(unless you use a reversed `_r` variant, which flips that).
+
+The most useful ones for depth videos:
+
+| Colormap | Type | Look | When to use |
+|----------|------|------|-------------|
+| **`gray`** (default) | sequential, grayscale | black far → white near | Cleanest, no chroma noise; best for downstream ML (e.g. ControlNet depth, geometry passes) or stereo/3D tools that expect luminance depth |
+| `gray_r` | sequential, grayscale | white far → black near | Reversed — matches the convention used by some depth-from-stereo tools |
+| `Spectral` | diverging, rainbow | blue far → yellow → red near | DA3's original default; high contrast, eye-friendly for human inspection |
+| `viridis` | sequential, perceptual | dark purple → green → yellow | Perceptually uniform, colorblind-safe, good for quantitative review |
+| `magma` | sequential, perceptual | black → purple → orange → white | Similar to viridis but warmer; great for dark scenes |
+| `inferno` | sequential, perceptual | black → red → yellow | Higher contrast than magma; pops on dark backgrounds |
+| `plasma` | sequential, perceptual | purple → pink → yellow | Vibrant, perceptually uniform alternative to viridis |
+| `turbo` | sequential, rainbow | blue → green → red | High-contrast rainbow; popular in robotics/SLAM viewers |
+| `jet` | sequential, rainbow | blue → cyan → yellow → red | Classic MATLAB rainbow; perceptually non-uniform — avoid for analysis but familiar to many |
+
+Append `_r` to any name to reverse it (`viridis_r`, `magma_r`, `turbo_r`, …).
+
+```bash
+v2d convert input.mp4 -o depth.mp4 --colormap viridis
+v2d convert input.mp4 -o depth.mp4 --colormap gray_r
+```
+
+> **Tip:** if you're feeding the depth video into another model (ControlNet,
+> NeRF preprocessing, stereo conversion tools), keep the default `gray` —
+> color colormaps embed three near-identical channels and waste bitrate
+> while distorting the underlying scalar.
 
 ## DA3 models
 

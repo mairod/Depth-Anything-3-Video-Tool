@@ -9,7 +9,7 @@ from typing import Optional
 import numpy as np
 
 from .depth_video import plan_chunks, stitch_chunks, write_depth_video
-from .ffmpeg_utils import mux_audio, probe_fps
+from .ffmpeg_utils import extract_frames, mux_audio, probe_fps
 from .interpolate import RifeRunner, choose_multiplier
 
 
@@ -30,6 +30,7 @@ class PipelineConfig:
     chunk_overlap: int = 8
     keep_audio: bool = True
     work_dir: Optional[Path] = None
+    colormap: str = "gray"
     vram_check: bool = True
     vram_safety: float = 1.25
 
@@ -147,6 +148,9 @@ def _probe_vram_or_die(
     estimated = baseline + per_frame * max_chunk
     needed = estimated * safety
 
+    free, total = torch.cuda.mem_get_info(dev)
+    # Free is reported AFTER our probe; the probe's tensors are gone but
+    # cached allocator blocks may still be reserved. empty_cache helps.
     torch.cuda.empty_cache()
     free, total = torch.cuda.mem_get_info(dev)
 
@@ -192,13 +196,19 @@ def _run_da3(cfg: PipelineConfig, export_dir: Path) -> None:
 
     # Import lazily — torch + DA3 weights load is slow.
     from depth_anything_3.api import DepthAnything3
-    from depth_anything_3.services.input_handlers import VideoHandler
 
     print(f"[v2d] loading model {cfg.model_dir} on {cfg.device}")
     model = DepthAnything3.from_pretrained(cfg.model_dir).to(cfg.device)
 
-    print(f"[v2d] extracting frames at {cfg.sample_fps} fps")
-    image_files = VideoHandler.process(str(cfg.input_video), str(export_dir), cfg.sample_fps)
+    # Cap extraction at process_res to avoid full-res PNGs from high-res inputs;
+    # DA3 would downscale to process_res internally anyway.
+    print(f"[v2d] extracting frames at {cfg.sample_fps} fps, capped at {cfg.process_res}px long edge")
+    image_files = extract_frames(
+        cfg.input_video,
+        export_dir / "input_images",
+        cfg.sample_fps,
+        max_long_edge=cfg.process_res,
+    )
     n = len(image_files)
 
     plan = plan_chunks(n, cfg.chunk_size, cfg.chunk_overlap)
@@ -238,4 +248,4 @@ def _run_da3(cfg: PipelineConfig, export_dir: Path) -> None:
 
     out = export_dir / "depth_video.mp4"
     print(f"[v2d] writing depth video to {out} at {cfg.sample_fps} fps")
-    write_depth_video(depth, out, fps=cfg.sample_fps)
+    write_depth_video(depth, out, fps=cfg.sample_fps, cmap=cfg.colormap)

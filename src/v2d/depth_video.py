@@ -7,7 +7,7 @@ import imageio
 import numpy as np
 
 
-def write_depth_video(depth: np.ndarray, out_path: Path, fps: float) -> Path:
+def write_depth_video(depth: np.ndarray, out_path: Path, fps: float, cmap: str = "gray") -> Path:
     """Render an (N, H, W) depth array to a colorised mp4."""
     from depth_anything_3.utils.visualize import visualize_depth
 
@@ -44,7 +44,7 @@ def write_depth_video(depth: np.ndarray, out_path: Path, fps: float) -> Path:
     )
     try:
         for idx in range(depth.shape[0]):
-            frame = visualize_depth(depth[idx]).astype(np.uint8)
+            frame = visualize_depth(depth[idx], cmap=cmap).astype(np.uint8)
             writer.append_data(frame)
     finally:
         writer.close()
