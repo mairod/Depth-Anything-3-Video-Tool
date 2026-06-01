@@ -113,7 +113,7 @@ attention is roughly quadratic in frame count, so long videos at moderate
 
 When the total frame count is `<= chunk_size`, chunking is a no-op.
 
-The win: you can push `--sample-fps` up (less work for RIFE/FILM and far
+The win: you can push `--sample-fps` up (less work for RIFE and far
 fewer hallucinations) and handle long videos without OOM. Pass `--chunk-size 0`
 or a value larger than the total frame count to force single-pass inference.
 
@@ -122,27 +122,17 @@ or a value larger than the total frame count to force single-pass inference.
 > The default of 8 hides this in most cases; bump it to 12-16 for picky
 > content or fast motion.
 
-## Frame interpolators
+## Frame interpolator
 
-Two backends, pick with `--interpolator`:
+[Practical-RIFE](https://github.com/hzwer/Practical-RIFE) is used to
+upsample DA3's low-fps depth output to the target frame rate. It is fast,
+GPU-friendly on all platforms, and low memory. At very high multipliers
+(when `--sample-fps` is much lower than the source) it can hallucinate.
 
-| Interpolator | Strengths | Weaknesses |
-|--------------|-----------|------------|
-| **RIFE** (default) | Fast, GPU-friendly on all platforms, low memory | Hallucinates aggressively at high multipliers (typical when `--sample-fps` is much lower than the source) |
-| **FILM** | Cleaner motion, far less hallucination on hard edges (ideal for depth maps) | Slower, runs on CPU on macOS (MPS lacks `grid_sample(border)`), bigger memory |
-
-Install whichever you want:
+Install with:
 
 ```bash
-v2d setup                          # installs RIFE only (default)
-v2d setup --interpolator film      # installs FILM weights only (~150 MB)
-v2d setup --interpolator both      # installs both
-```
-
-Then:
-
-```bash
-v2d convert input.mp4 -o depth.mp4 --interpolator film
+v2d setup   # clones Practical-RIFE + downloads v4.26 weights
 ```
 
 ## Options (convert)
@@ -157,10 +147,8 @@ v2d convert input.mp4 -o depth.mp4 --interpolator film
 | `--process-res` | `504` | DA3 processing resolution |
 | `--chunk-size` | `32` | Frames per DA3 forward pass (0 = single-shot) |
 | `--chunk-overlap` | `8` | Frames shared between consecutive chunks |
-| `--interpolator` | `rife` | `rife` or `film` |
 | `--rife-dir` | cache | Override the Practical-RIFE checkout location |
 | `--rife-python` | current interpreter | Python used to invoke RIFE |
-| `--film-model` | cache | Override the FILM `.pt` path |
 | `--no-interpolate` | off | Skip interpolation, output at `--sample-fps` |
 | `--keep-audio / --no-keep-audio` | keep | Mux source audio into output |
 | `--work-dir` | tempdir | Keep intermediates here (extracted frames, low-fps depth) |

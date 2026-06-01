@@ -10,7 +10,6 @@ import numpy as np
 
 from .depth_video import plan_chunks, stitch_chunks, write_depth_video
 from .ffmpeg_utils import mux_audio, probe_fps
-from .film import FilmRunner
 from .interpolate import RifeRunner, choose_multiplier
 
 
@@ -26,8 +25,7 @@ class PipelineConfig:
     rife_dir: Optional[Path] = None
     rife_python: Optional[str] = None
     rife_verbose: bool = False
-    interpolator: str = "rife"  # "rife" | "film" | "none"
-    film_model: Optional[Path] = None
+    interpolator: str = "rife"  # "rife" | "none"
     chunk_size: int = 32
     chunk_overlap: int = 8
     keep_audio: bool = True
@@ -53,14 +51,6 @@ def run(cfg: PipelineConfig) -> Path:
     if cfg.interpolator == "none":
         print("[v2d] interpolation disabled (--no-interpolate)")
         depth_interp = depth_low
-    elif cfg.interpolator == "film":
-        if cfg.film_model is None:
-            raise ValueError("interpolator='film' requires cfg.film_model")
-        multi = choose_multiplier(target_fps, cfg.sample_fps)
-        print(f"[v2d] FILM interpolating x{multi} (model={cfg.film_model.name})")
-        film = FilmRunner(cfg.film_model, device=cfg.device)
-        depth_interp = tmp_root / "depth_interp.mp4"
-        film.interpolate(depth_low, depth_interp, multi)
     elif cfg.interpolator == "rife":
         if cfg.rife_dir is None:
             raise ValueError("interpolator='rife' requires cfg.rife_dir")

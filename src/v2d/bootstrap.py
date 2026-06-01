@@ -10,13 +10,6 @@ RIFE_REPO = "https://github.com/hzwer/Practical-RIFE.git"
 RIFE_WEIGHTS_GDRIVE_ID = "1gViYvvQrtETBgU1w8axZSsr7YUuw31uy"  # v4.26 standard
 RIFE_WEIGHTS_VERSION = "v4.26"
 
-# dajes/frame-interpolation-pytorch torchscript build of Google FILM
-FILM_RELEASE = "v1.0.2"
-FILM_WEIGHTS_URL = (
-    f"https://github.com/dajes/frame-interpolation-pytorch/releases/download/{FILM_RELEASE}/film_net_fp32.pt"
-)
-FILM_WEIGHTS_NAME = "film_net_fp32.pt"
-
 
 def cache_root() -> Path:
     root = os.environ.get("V2D_CACHE_DIR")
@@ -27,14 +20,6 @@ def cache_root() -> Path:
 
 def rife_dir_default() -> Path:
     return cache_root() / "Practical-RIFE"
-
-
-def film_path_default() -> Path:
-    return cache_root() / "film" / FILM_WEIGHTS_NAME
-
-
-def film_is_installed(path: Path) -> bool:
-    return path.exists() and path.stat().st_size > 0
 
 
 def rife_is_installed(path: Path) -> bool:
@@ -88,33 +73,6 @@ def download_rife_weights(target: Path) -> bool:
     if macosx.exists():
         shutil.rmtree(macosx, ignore_errors=True)
     return (target / "train_log").is_dir()
-
-
-def download_film_weights(target: Path) -> bool:
-    target.parent.mkdir(parents=True, exist_ok=True)
-    print(f"[v2d] downloading FILM weights ({FILM_RELEASE}, ~150 MB)")
-    try:
-        subprocess.run(
-            ["curl", "-fL", "--retry", "3", "-o", str(target), FILM_WEIGHTS_URL],
-            check=True,
-        )
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        print(f"[v2d] curl failed: {e}. Download manually from {FILM_WEIGHTS_URL}")
-        return False
-    return film_is_installed(target)
-
-
-def ensure_film(target: Path | None = None, *, install: bool = False) -> Path:
-    path = target or film_path_default()
-    if film_is_installed(path):
-        return path
-    if not install:
-        raise FileNotFoundError(
-            f"FILM weights not found at {path}. Run `v2d setup --interpolator film` first."
-        )
-    if not download_film_weights(path):
-        raise RuntimeError(f"failed to download FILM weights to {path}")
-    return path
 
 
 def ensure_rife(target: Path | None = None, *, install: bool = False) -> Path:
