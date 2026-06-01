@@ -126,8 +126,21 @@ v2d convert input.mp4 -o depth.mp4 --model-dir depth-anything/DA3-BASE
 Switch to the Video-Depth-Anything backend (requires `v2d setup-vda`):
 
 ```bash
+# Apple Silicon (M-series) — VDA-S, fp32 (sidesteps MPS fp16 glitches),
+# turbo colormap, no audio, fixed output fps. The lightest setup that ships.
+KMP_DUPLICATE_LIB_OK=TRUE v2d convert input.mp4 -o depth.mp4 \
+  --device mps --backend vda --vda-encoder vits --vda-fp32 \
+  --target-fps 30 --colormap turbo --no-keep-audio
+
+# Single-GPU CUDA, default (largest installed) encoder, fp16.
 v2d convert input.mp4 -o depth.mp4 --backend vda --device cuda
-v2d convert input.mp4 -o depth.mp4 --backend vda --vda-encoder vits   # faster
+
+# Fast preview on CUDA with the small encoder.
+v2d convert input.mp4 -o depth.mp4 --backend vda --device cuda --vda-encoder vits
+
+# Long clip on limited VRAM — cap frames per internal VDA chunk.
+v2d convert long_clip.mp4 -o depth.mp4 --backend vda --device cuda \
+  --vda-encoder vitb --vda-max-len 32
 ```
 
 ## Backends
