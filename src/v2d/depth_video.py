@@ -1,14 +1,21 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from typing import Iterable
 
-import imageio
 import numpy as np
+
+from .ffmpeg_utils import require
 
 
 def write_depth_video(depth: np.ndarray, out_path: Path, fps: float, cmap: str = "gray") -> Path:
-    """Render an (N, H, W) depth array to a colorised mp4."""
+    """Render an (N, H, W) depth array to a browser-playable H.264 mp4.
+
+    Pipes raw RGB frames into ffmpeg → libx264 (yuv420p, faststart). Avoids
+    imageio's silent codec fallback to mpeg4 when imageio_ffmpeg's bundled
+    binary lacks x264 support.
+    """
     from depth_anything_3.utils.visualize import visualize_depth
 
     depth = np.asarray(depth, dtype=np.float32)
@@ -38,16 +45,49 @@ def write_depth_video(depth: np.ndarray, out_path: Path, fps: float, cmap: str =
             "Likely an MPS attention bug; try --device cpu or a smaller model."
         )
 
+    if depth.shape[0] == 0:
+        raise ValueError("depth tensor has zero frames")
+
+    first = visualize_depth(depth[0], cmap=cmap).astype(np.uint8)
+    if first.ndim != 3 or first.shape[2] != 3:
+        raise RuntimeError(f"unexpected visualize_depth output shape {first.shape}")
+    h, w = first.shape[:2]
+
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    writer = imageio.get_writer(
-        str(out_path), fps=fps, codec="libx264", quality=8, macro_block_size=1,
+    require("ffmpeg")
+    # pad to even dims — yuv420p requires width/height divisible by 2.
+    proc = subprocess.Popen(
+        [
+            "ffmpeg", "-y", "-v", "error",
+            "-f", "rawvideo",
+            "-pix_fmt", "rgb24",
+            "-s", f"{w}x{h}",
+            "-r", f"{fps}",
+            "-i", "pipe:",
+            "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2:color=black",
+            "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
+            "-preset", "slow",
+            "-crf", "18",
+            "-movflags", "+faststart",
+            str(out_path),
+        ],
+        stdin=subprocess.PIPE,
     )
     try:
-        for idx in range(depth.shape[0]):
-            frame = visualize_depth(depth[idx], cmap=cmap).astype(np.uint8)
-            writer.append_data(frame)
+        try:
+            proc.stdin.write(first.tobytes())
+            for idx in range(1, depth.shape[0]):
+                frame = visualize_depth(depth[idx], cmap=cmap).astype(np.uint8)
+                proc.stdin.write(frame.tobytes())
+        except BrokenPipeError:
+            pass  # ffmpeg already errored; rc check below surfaces it.
     finally:
-        writer.close()
+        if proc.stdin:
+            proc.stdin.close()
+        rc = proc.wait()
+    if rc != 0:
+        raise RuntimeError(f"ffmpeg exited with code {rc} writing {out_path}")
     return out_path
 
 
