@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+.env
+.DS_Store
+output/
+tmp/
+tmp_work/
+*.mp4
+*.mov
+*.mkv
+# keep bundled examples
+!assets/**/*.mp4
+!assets/**/*.mov
+!assets/**/*.mkv

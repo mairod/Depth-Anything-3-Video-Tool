@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "v2d"
+version = "0.1.0"
+description = "Convert any video to a depth-map video using Depth Anything 3 + frame interpolation"
+requires-python = ">=3.10,<3.13"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Dorian Lods" }]
+
+# DA3 is installed separately with --no-deps via `make install` so we can skip
+# its xformers and open3d requirements (no Mac arm64 wheels). The list below is
+# DA3's runtime dependency set minus those two and minus the server/dev-only
+# packages (pre-commit, fastapi, uvicorn) that this CLI does not exercise.
+dependencies = [
+    "typer>=0.12",
+    "numpy<2",
+    # torch>=2.7 breaks DA3-LARGE (and presumably larger) on Apple Silicon
+    # MPS: attention silently collapses to a constant, so depth output is a
+    # flat color. 2.6.x is the last version verified to produce correct depth
+    # across all DA3 model sizes on macOS arm64. Linux/CUDA users get newer
+    # torch since the regression is MPS-only.
+    "torch>=2.1,<2.7;          sys_platform == 'darwin'",
+    "torchvision<0.22;         sys_platform == 'darwin'",
+    "torch>=2.1;               sys_platform != 'darwin'",
+    "torchvision;              sys_platform != 'darwin'",
+    "einops",
+    "huggingface_hub",
+    "imageio",
+    "moviepy==1.0.3",
+    "omegaconf",
+    "opencv-python",
+    "pillow",
+    "pillow_heif",
+    "plyfile",
+    "requests",
+    "safetensors",
+    "trimesh",
+    "e3nn",
+    "evo",
+    "pycolmap",
+    # Not declared in upstream DA3 pyproject but imported at runtime.
+    "addict",
+    # DA3 `services/__init__.py` eagerly imports its FastAPI backend even if
+    # you only want VideoHandler, so the server deps are mandatory in practice.
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    # Practical-RIFE deps. `make patch-skvideo` fixes np.float removal on
+    # modern numpy.
+    "gdown>=5",
+    "sk-video>=1.1.10",
+]
+
+[project.scripts]
+v2d = "v2d.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
