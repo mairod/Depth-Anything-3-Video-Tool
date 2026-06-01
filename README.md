@@ -33,10 +33,10 @@ produced with the default settings (`DA3-LARGE-1.1`, `--sample-fps 1`,
   </tr>
   <tr>
     <td>
-      <video src="assets/examples/robot_unitree.mp4" controls width="400"></video>
+      <video src="https://github.com/user-attachments/assets/6778e7c6-63c4-4b1b-91b4-75fd9e561d27" controls width="400"></video>
     </td>
     <td>
-      <video src="assets/examples/demo_robot_unitree.mp4" controls width="400"></video>
+      <video src="https://github.com/user-attachments/assets/9a5d7443-fd84-4240-a983-510114e83b04" controls width="400"></video>
     </td>
   </tr>
 </table>
