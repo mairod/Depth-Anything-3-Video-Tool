@@ -116,7 +116,9 @@ def vda_ckpt_path(target: Path, encoder: str) -> Path:
 
 
 def vda_repo_is_cloned(target: Path) -> bool:
-    return (target / "video_depth_anything" / "__init__.py").exists()
+    # VDA uses an implicit namespace package (no __init__.py); check for the
+    # main module file instead.
+    return (target / "video_depth_anything" / "video_depth.py").exists()
 
 
 def vda_is_installed(target: Path, encoder: str | None = None) -> bool:
@@ -130,6 +132,14 @@ def vda_is_installed(target: Path, encoder: str | None = None) -> bool:
     if encoder is not None:
         return vda_ckpt_path(target, encoder).exists()
     return any(vda_ckpt_path(target, e).exists() for e in VDA_CKPT_FILENAME)
+
+
+def vda_installed_encoders(target: Path) -> list[str]:
+    """List installed encoders, biggest first (vitl, vitb, vits)."""
+    if not vda_repo_is_cloned(target):
+        return []
+    order = ["vitl", "vitb", "vits"]
+    return [e for e in order if vda_ckpt_path(target, e).exists()]
 
 
 def clone_vda(target: Path) -> None:

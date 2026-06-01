@@ -11,6 +11,7 @@ from .bootstrap import (
     rife_dir_default,
     rife_is_installed,
     vda_dir_default,
+    vda_installed_encoders,
     vda_is_installed,
 )
 from .pipeline import PipelineConfig, run
@@ -98,9 +99,9 @@ def convert(
         None,
         help="[VDA only] Path to a Video-Depth-Anything checkout. Defaults to the cached one from `v2d setup-vda`.",
     ),
-    vda_encoder: str = typer.Option(
-        "vitl",
-        help="[VDA only] VDA encoder size: vits | vitb | vitl.",
+    vda_encoder: Optional[str] = typer.Option(
+        None,
+        help="[VDA only] VDA encoder size: vits | vitb | vitl. Auto-picks the largest installed if omitted.",
     ),
     vda_input_size: int = typer.Option(
         518,
@@ -150,7 +151,16 @@ def convert(
             interpolator_final = "rife"
     else:  # vda
         candidate_vda = vda_dir or vda_dir_default()
-        if not vda_is_installed(candidate_vda, encoder=vda_encoder):
+        if vda_encoder is None:
+            installed = vda_installed_encoders(candidate_vda)
+            if not installed:
+                raise typer.BadParameter(
+                    f"No VDA encoder installed at {candidate_vda}. "
+                    f"Run `v2d setup-vda --encoder vits|vitb|vitl`."
+                )
+            vda_encoder = installed[0]
+            typer.echo(f"[v2d] auto-selected --vda-encoder {vda_encoder} (installed: {', '.join(installed)})")
+        elif not vda_is_installed(candidate_vda, encoder=vda_encoder):
             raise typer.BadParameter(
                 f"VDA not installed at {candidate_vda} for encoder={vda_encoder!r}. "
                 f"Run `v2d setup-vda --encoder {vda_encoder}`."
