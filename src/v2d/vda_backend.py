@@ -115,4 +115,4 @@ def run_vda(cfg, out_video: Path, target_fps: float) -> None:
     depths = np.asarray(depths, dtype=np.float32)
 
     print(f"[v2d] writing depth video to {out_video} at {out_fps:.3f} fps")
-    write_depth_video(depths, out_video, fps=out_fps, cmap=cfg.colormap)
+    write_depth_video(depths, out_video, fps=out_fps, cmap=cfg.colormap, norm_mode=cfg.colormap_norm)

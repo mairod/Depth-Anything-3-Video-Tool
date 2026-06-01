@@ -9,15 +9,69 @@ import numpy as np
 from .ffmpeg_utils import require
 
 
-def write_depth_video(depth: np.ndarray, out_path: Path, fps: float, cmap: str = "gray") -> Path:
+def _global_range(depth: np.ndarray, norm_mode: str) -> tuple[float, float] | None:
+    """Return (lo, hi) for global colormap mapping, or None for per-frame mode.
+
+    "global"      → exact min/max across all frames.
+    "global-p99"  → 1st/99th percentiles, robust to outlier frames.
+    "per-frame"   → returns None (caller falls back to per-frame normalization).
+    """
+    if norm_mode == "per-frame":
+        return None
+    finite = depth[np.isfinite(depth)]
+    if finite.size == 0:
+        return None
+    if norm_mode == "global":
+        lo, hi = float(finite.min()), float(finite.max())
+    elif norm_mode == "global-p99":
+        lo = float(np.percentile(finite, 1.0))
+        hi = float(np.percentile(finite, 99.0))
+    else:
+        raise ValueError(
+            f"unknown colormap norm_mode: {norm_mode!r} "
+            "(choose per-frame, global, global-p99)"
+        )
+    if not (hi > lo):
+        return None
+    return lo, hi
+
+
+def _render_frame(d: np.ndarray, cmap: str, lo_hi: tuple[float, float] | None) -> np.ndarray:
+    """Return (H, W, 3) uint8 RGB for one depth slice."""
+    if lo_hi is None:
+        # Per-frame mode: defer to DA3's visualize_depth (matches legacy
+        # output exactly).
+        from depth_anything_3.utils.visualize import visualize_depth
+        return visualize_depth(d, cmap=cmap).astype(np.uint8)
+    lo, hi = lo_hi
+    import matplotlib
+    cm = matplotlib.colormaps.get_cmap(cmap)
+    d = np.asarray(d, dtype=np.float32)
+    d = np.where(np.isfinite(d), d, lo)
+    n = np.clip((d - lo) / max(hi - lo, 1e-8), 0.0, 1.0)
+    rgba = cm(n)  # (H, W, 4) in [0, 1]
+    return (rgba[..., :3] * 255.0).astype(np.uint8)
+
+
+def write_depth_video(
+    depth: np.ndarray,
+    out_path: Path,
+    fps: float,
+    cmap: str = "gray",
+    norm_mode: str = "global-p99",
+) -> Path:
     """Render an (N, H, W) depth array to a browser-playable H.264 mp4.
 
     Pipes raw RGB frames into ffmpeg → libx264 (yuv420p, faststart). Avoids
     imageio's silent codec fallback to mpeg4 when imageio_ffmpeg's bundled
     binary lacks x264 support.
-    """
-    from depth_anything_3.utils.visualize import visualize_depth
 
+    ``norm_mode`` controls how the depth values map to colormap range:
+    "per-frame" rebases [0, 1] every frame (legacy behavior, causes brightness
+    flicker when the scene's depth range shifts), "global" pins to the entire
+    sequence's min/max, "global-p99" uses 1st/99th percentiles (default —
+    robust to a single noisy frame).
+    """
     depth = np.asarray(depth, dtype=np.float32)
     nan_frac = float(np.isnan(depth).mean())
     inf_frac = float(np.isinf(depth).mean())
@@ -48,9 +102,17 @@ def write_depth_video(depth: np.ndarray, out_path: Path, fps: float, cmap: str =
     if depth.shape[0] == 0:
         raise ValueError("depth tensor has zero frames")
 
-    first = visualize_depth(depth[0], cmap=cmap).astype(np.uint8)
+    lo_hi = _global_range(depth, norm_mode)
+    if lo_hi is not None:
+        print(
+            f"[v2d] colormap norm: {norm_mode}  range=[{lo_hi[0]:.4f}, {lo_hi[1]:.4f}]"
+        )
+    else:
+        print(f"[v2d] colormap norm: per-frame")
+
+    first = _render_frame(depth[0], cmap, lo_hi)
     if first.ndim != 3 or first.shape[2] != 3:
-        raise RuntimeError(f"unexpected visualize_depth output shape {first.shape}")
+        raise RuntimeError(f"unexpected rendered frame shape {first.shape}")
     h, w = first.shape[:2]
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -78,7 +140,7 @@ def write_depth_video(depth: np.ndarray, out_path: Path, fps: float, cmap: str =
         try:
             proc.stdin.write(first.tobytes())
             for idx in range(1, depth.shape[0]):
-                frame = visualize_depth(depth[idx], cmap=cmap).astype(np.uint8)
+                frame = _render_frame(depth[idx], cmap, lo_hi)
                 proc.stdin.write(frame.tobytes())
         except BrokenPipeError:
             pass  # ffmpeg already errored; rc check below surfaces it.

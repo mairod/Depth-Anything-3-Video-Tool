@@ -33,6 +33,7 @@ class PipelineConfig:
     keep_audio: bool = True
     work_dir: Optional[Path] = None
     colormap: str = "gray"
+    colormap_norm: str = "global-p99"  # per-frame | global | global-p99
     vram_check: bool = True
     vram_safety: float = 1.25
     # VDA-specific
@@ -192,4 +193,4 @@ def _run_da3(cfg: PipelineConfig, export_dir: Path) -> None:
 
     out = export_dir / "depth_video.mp4"
     print(f"[v2d] writing depth video to {out} at {cfg.sample_fps} fps")
-    write_depth_video(depth, out, fps=cfg.sample_fps, cmap=cfg.colormap)
+    write_depth_video(depth, out, fps=cfg.sample_fps, cmap=cfg.colormap, norm_mode=cfg.colormap_norm)

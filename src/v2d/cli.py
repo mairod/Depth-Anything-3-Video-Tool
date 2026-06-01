@@ -86,6 +86,10 @@ def convert(
         "gray",
         help="Matplotlib colormap for depth rendering. e.g. gray, gray_r, Spectral, viridis, magma, inferno, plasma, turbo, jet.",
     ),
+    colormap_norm: str = typer.Option(
+        "global-p99",
+        help="Depth-to-colormap normalization. `global-p99` (default, robust) and `global` pin the colormap range across the whole video so brightness is comparable frame-to-frame. `per-frame` rebases per frame (legacy; causes flicker when scene depth range shifts).",
+    ),
     vram_check: bool = typer.Option(
         True,
         "--vram-check/--no-vram-check",
@@ -185,6 +189,7 @@ def convert(
         keep_audio=keep_audio,
         work_dir=work_dir,
         colormap=colormap,
+        colormap_norm=colormap_norm,
         vram_check=vram_check,
         vram_safety=vram_safety,
         vda_dir=resolved_vda,
